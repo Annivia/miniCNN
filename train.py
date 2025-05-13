@@ -25,15 +25,8 @@ class DetectCNN(nn.Module):
         super(DetectCNN, self).__init__()
 
         self.env_n = env_n  # boxing, skiing, lb_foraging, mario
-        if self.env_n == "boxing":
-            self.output_dim = 8
-        elif self.env_n == "skiing":
+        if self.env_n == "redball":
             self.output_dim = 6
-        elif self.env_n == "redball":
-            self.output_dim = 5
-        elif self.env_n == "lb_foraging":
-            self.output_dim = 4
-            raise NotImplementedError
         else:
             raise NotImplementedError(self.env_n)
         if self.env_n in ["boxing", "skiing"]:
@@ -133,8 +126,8 @@ def compute_loss(pred, target, env_name):
     if env_name == "redball":
         binary_target = torch.clamp(target[:, :3], 0, 1)
         loss_binary = binary_loss(pred[:, :3], binary_target)
-        # loss_float = float_loss(pred[:, 3:], target[:, 3:])
-        loss_float = categorical_loss(pred[:, 3:], target[:, 3:])
+        loss_float = float_loss(pred[:, 3:], target[:, 3:])
+        # loss_float = categorical_loss(pred[:, 3:], target[:, 3:])
         total_loss = loss_binary + loss_float
 
     else:
