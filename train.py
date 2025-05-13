@@ -93,9 +93,9 @@ class CustomImageDataset(Dataset):
         self.env_name = env_name
         print("labels are at: ", csv_file)
         if size == 10000:
-            self.image_folder = f'/home/pony/Documents/A-Research/SILVA_VLMFeature/miniCNN/redball_images/redball_train_filtered'
+            self.image_folder = f'redball_images/redball_train_filtered'
         else:
-            self.image_folder = f'/home/pony/Documents/A-Research/SILVA_VLMFeature/miniCNN/redball_images/redball_test_filtered'
+            self.image_folder = f'redball_images/redball_test_filtered'
         self.data = pd.read_csv(csv_file, header=None)
         self.transform = transform
 
