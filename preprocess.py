@@ -1,55 +1,79 @@
 import pandas as pd
+import numpy as np
 import os
-import sys
 
-# def process_csv(file_path, output_path):
-#     # Load CSV
-#     df = pd.read_csv(file_path)
+# Define offsets for None values (easily adjustable)
+LOWER_LANE_X_OFFSET = -1.0  # Offset for vehicle_adjacent_lower_lane_0_x_position
+UPPER_LANE_X_OFFSET = -1.0  # Offset for vehicle_adjacent_upper_lane_0_x_position
+SAME_LANE_X_OFFSET = -1.0   # Offset for vehicle_ahead_same_lane_0_x_position
 
-#     # Drop direction columns
-#     direction_cols = [col for col in df.columns if 'direction' in col]
-#     df.drop(columns=direction_cols, inplace=True)
-
-#     # Convert boolean-like strings to 0/1
-#     for col in df.columns:
-#         if 'is_blocked' in col:
-#             df[col] = df[col].map({'True': 1, 'False': 0, True: 1, False: 0})
-
-#     df.to_csv(output_path, index=False)
-#     print(f"Saved processed file to {output_path}")
-
-def process_csv(file_path, output_path):
-    # Load CSV
-    df = pd.read_csv(file_path)
-
-    # Drop direction columns
-    direction_cols = [col for col in df.columns if 'direction' in col]
-    df.drop(columns=direction_cols, inplace=True)
-
-    # Convert boolean-like strings to 0/1
-    for col in df.columns:
-        if 'is_blocked' in col:
-            df[col] = df[col].map({'True': 1, 'False': 0, True: 1, False: 0})
-
-    # Add red_ball_exists column
-    red_ball_x = 'red_ball_0_x_relative_position'
-    red_ball_y = 'red_ball_0_y_relative_position'
-
-    # Check for presence: if both x and y are not NaN, then red ball exists
-    df['red_ball_exists'] = (~df[red_ball_x].isna() & ~df[red_ball_y].isna()).astype(int)
-
-    # Fill missing red ball positions if not present
-    df[red_ball_x].fillna(0, inplace=True)
-    df[red_ball_y].fillna(-5, inplace=True)
-
-    # Save processed file
+def process_csv(input_path, output_path):
+    print(f"Processing {input_path}...")
+    
+    # Read the CSV file
+    df = pd.read_csv(input_path)
+    
+    # Get initial row count
+    initial_row_count = len(df)
+    print(f"Initial row count: {initial_row_count}")
+    
+    # Remove rows where agent positions are None
+    df = df.dropna(subset=['agent_0_x_position', 'agent_0_y_position'])
+    
+    # Count deleted rows
+    deleted_rows = initial_row_count - len(df)
+    print(f"Deleted {deleted_rows} rows with None agent positions")
+    
+    # Validate lane existence columns (must be True or False)
+    for col in ['lane_existence_lower_lane_exists', 'lane_existence_upper_lane_exists']:
+        # Check if any non-NaN values are not True or False
+        invalid_values = df[col].dropna().apply(lambda x: x not in [True, False])
+        if invalid_values.any():
+            raise ValueError(f"Column {col} contains values other than True or False")
+    
+    # Convert True/False to 1/0 for lane existence columns
+    df['lane_existence_lower_lane_exists'] = df['lane_existence_lower_lane_exists'].map({True: 1, False: 0})
+    df['lane_existence_upper_lane_exists'] = df['lane_existence_upper_lane_exists'].map({True: 1, False: 0})
+    
+    # Fill NaN values with appropriate offsets
+    df['vehicle_adjacent_lower_lane_0_x_position'] = df['vehicle_adjacent_lower_lane_0_x_position'].fillna(LOWER_LANE_X_OFFSET)
+    df['vehicle_adjacent_upper_lane_0_x_position'] = df['vehicle_adjacent_upper_lane_0_x_position'].fillna(UPPER_LANE_X_OFFSET)
+    df['vehicle_ahead_same_lane_0_x_position'] = df['vehicle_ahead_same_lane_0_x_position'].fillna(SAME_LANE_X_OFFSET)
+    
+    # Reorder columns
+    column_order = [
+        'file_name',
+        'lane_existence_lower_lane_exists',
+        'lane_existence_upper_lane_exists',
+        'vehicle_adjacent_lower_lane_0_x_position',
+        'vehicle_adjacent_upper_lane_0_x_position',
+        'vehicle_ahead_same_lane_0_x_position',
+        'agent_0_x_position',
+        'agent_0_y_position'
+    ]
+    
+    df = df[column_order]
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    # Save processed data to new CSV
     df.to_csv(output_path, index=False)
-    print(f"Saved processed file to {output_path}")
+    print(f"Processed data saved to {output_path}")
+    print(f"Final row count: {len(df)}")
+    
+    return deleted_rows
 
-if __name__ == '__main__':
-    file_path_train = "redball_data/redball_train_filtered_single_frame.csv"
-    file_path_test = "redball_data/redball_test_filtered_single_frame.csv"
+def main():
+    # Process training data
+    train_deleted = process_csv('highway_data/highway_train_single_frame.csv', 'highway_data/train.csv')
+    
+    # Process test data
+    test_deleted = process_csv('highway_data/highway_test_single_frame.csv', 'highway_data/test.csv')
+    
+    # Total deleted rows
+    total_deleted = train_deleted + test_deleted
+    print(f"\nTotal rows deleted: {total_deleted}")
 
-    process_csv(file_path_train, "redball_data/train.csv")
-    process_csv(file_path_test, "redball_data/test.csv")
-
+if __name__ == "__main__":
+    main()
