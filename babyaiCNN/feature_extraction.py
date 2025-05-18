@@ -154,9 +154,29 @@ class BallDetectionCNN(nn.Module):
         return x
     
 
-@torch.no_grad()
 
-def feature_extraction(image_path, binary_model_path = "binary/binary.pth", ball_model_path="/home/xzhang3205/miniCNN/logs/ball_detection.pth"):
+
+ball_model_path="/home/xzhang3205/miniCNN/logs/ball_detection.pth"
+binary_model_path = "/home/xzhang3205/miniCNN/babyaiCNN/binary/binary.pth"
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+binary_model = BinaryDetectCNN(3, 448, 448).to(device)
+binary_model.load_state_dict(torch.load(binary_model_path, map_location=device))
+binary_model.eval()
+
+ball_model = BallDetectionCNN().to(device)
+ball_model.load_state_dict(torch.load(ball_model_path, map_location=device))
+ball_model.eval()
+
+# For BallDetectionCNN
+ball_transform = transforms.Compose([
+    transforms.Resize((64, 64)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
+    
+@torch.no_grad()
+def feature_extraction(image_path,):
     """
     Extract binary features from an image using the BinaryDetectCNN model.
     
@@ -168,7 +188,7 @@ def feature_extraction(image_path, binary_model_path = "binary/binary.pth", ball
     """
 
     # Set device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
     
     # Process the image exactly as in CustomImageDataset.__getitem__
     image = cv2.imread(image_path)
@@ -183,24 +203,8 @@ def feature_extraction(image_path, binary_model_path = "binary/binary.pth", ball
     num_channels = image_tensor.shape[1]
     image_height = image_tensor.shape[2]
     image_width = image_tensor.shape[3]
-    assert(image_height==448)
-    assert(image_width==448)
     
-    binary_model = BinaryDetectCNN(num_channels, image_height, image_width).to(device)
-    binary_model.load_state_dict(torch.load(binary_model_path, map_location=device))
-    binary_model.eval()
 
-    ball_model = BallDetectionCNN().to(device)
-    ball_model.load_state_dict(torch.load(ball_model_path, map_location=device))
-    ball_model.eval()
-    
-    # For BallDetectionCNN
-    ball_transform = transforms.Compose([
-        transforms.Resize((64, 64)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    
     
     # Get predictions
     with torch.no_grad():

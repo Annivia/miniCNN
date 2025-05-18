@@ -11,20 +11,8 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score
 from torchvision import transforms, models
-
-instance = 'lower' # Could be lower or upper
-
-# Reusing the model and dataset definitions from your code
-# Define paths
-TRAIN_CSV = f"highway_data/train_{instance}.csv"
-TEST_CSV = f"highway_data/test_{instance}.csv"
-TRAIN_IMG_DIR = "/home/xzhang3205/full_dataset/highway_train"
-TEST_IMG_DIR = "/home/xzhang3205/full_dataset/highway_test"
-MODEL_PATH = "logs/highway_use/best_model.pth"
-OUTPUT_DIR = "highway_data"  # Same parent directory as train.csv and test.csv
-
-# Create output directory if it doesn't exist
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+from PIL import Image
+import torch
 
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -150,7 +138,7 @@ class HighwayCNN(nn.Module):
     
 class HighwayCNNSingle(nn.Module):
     def __init__(self, use_pretrained=True):
-        super(HighwayCNN, self).__init__()
+        super(HighwayCNNSingle, self).__init__()
         
         # Use ResNet18 as a pretrained backbone for better feature extraction
         self.backbone = models.resnet18(weights='DEFAULT' if use_pretrained else None)
@@ -200,33 +188,84 @@ transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-# Load datasets
-train_dataset = HighwayDataset(TRAIN_CSV, TRAIN_IMG_DIR, transform=transform)
-test_dataset = HighwayDataset(TEST_CSV, TEST_IMG_DIR, transform=transform)
-train_loader = DataLoader(train_dataset, batch_size=16, shuffle=False, num_workers=2)
-test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False, num_workers=2)
+# # Load datasets
+# train_dataset = HighwayDataset(TRAIN_CSV, TRAIN_IMG_DIR, transform=transform)
+# test_dataset = HighwayDataset(TEST_CSV, TEST_IMG_DIR, transform=transform)
+# train_loader = DataLoader(train_dataset, batch_size=16, shuffle=False, num_workers=2)
+# test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False, num_workers=2)
 
 # Load the model
 model = HighwayCNN().to(device)
-checkpoint = torch.load(MODEL_PATH, map_location=device)
+checkpoint = torch.load('/home/xzhang3205/miniCNN/highwayCNN/best_model.pth', map_location=device)
 model.load_state_dict(checkpoint['model_state_dict'])
 model.eval()
 print("Main Model loaded successfully")
 
 model_lower = HighwayCNNSingle().to(device)
-checkpoint = torch.load('best_model_lower.pth', map_location=device)
+checkpoint = torch.load('/home/xzhang3205/miniCNN/highwayCNN/best_model_lower.pth', map_location=device)
 model_lower.load_state_dict(checkpoint['model_state_dict'])
 model_lower.eval()
 print("Lower Model loaded successfully")
 
 model_upper = HighwayCNNSingle().to(device)
-checkpoint = torch.load('best_model_upper.pth', map_location=device)
+checkpoint = torch.load('/home/xzhang3205/miniCNN/highwayCNN/best_model_upper.pth', map_location=device)
 model_upper.load_state_dict(checkpoint['model_state_dict'])
 model_upper.eval()
 print("Lower Model loaded successfully")
 
 model_front = HighwayCNNSingle().to(device)
-checkpoint = torch.load('best_model_front.pth', map_location=device)
+checkpoint = torch.load('/home/xzhang3205/miniCNN/highwayCNN/best_model_front.pth', map_location=device)
 model_front.load_state_dict(checkpoint['model_state_dict'])
 model_front.eval()
 print("Lower Model loaded successfully")
+
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
+
+
+def feature_extraction(img_path):
+    # Load the image with PIL
+    img = Image.open(img_path).convert('RGB')
+    
+    # Apply the same transform used during training/validation
+    input_tensor = transform(img)  # shape: (C, H, W)
+    
+    # Add batch dimension: shape -> (1, C, H, W)
+    input_tensor = input_tensor.unsqueeze(0)
+    
+    # Move to the appropriate device if needed (e.g., GPU)
+    input_tensor = input_tensor.to(next(model.parameters()).device)
+    
+    # Inference
+    # model.eval()
+    # model_lower.eval()
+    # model_upper.eval()
+    # model_front.eval()
+    with torch.no_grad():
+        output_main = model(input_tensor)
+        output_lower = model_lower(input_tensor)
+        output_upper = model_upper(input_tensor)
+        output_front = model_front(input_tensor)
+        # print(output_main[0]) # lane_existence_lower_lane_exists, # lane_existence_upper_lane_exists
+        # print(output_main[1]) # vehicle_ahead_same_lane_0_x_position,agent_0_x_position,agent_0_y_position
+        # print(output_lower) # vehicle_adjacent_lower_lane_0_x_position
+        # print(output_upper) # vehicle_adjacent_upper_lane_0_x_position
+        # print(output_front) # vehicle_ahead_same_lane_0_x_position
+
+        feature_vector = torch.cat([
+            # output_main[0].flatten(),  # lane existence
+            # output_main[1][1:].flatten(),  # agent positions
+            output_main[0].squeeze(0),        # lane existence: [2]
+            output_main[1][:, 1:].squeeze(0), # agent x/y only: [2]
+            output_lower.flatten(),    # adjacent lower lane vehicle position
+            output_upper.flatten(),    # adjacent upper lane vehicle position
+            output_front.flatten()     # adjacent front lane vehicle position
+            # output_main[1][0].flatten()
+        ])
+
+    return feature_vector
+
+# print(feature_extraction('/home/xzhang3205/full_dataset/highway_train/image_04597.png'))
